@@ -4,6 +4,9 @@
   --color-fondo: #f8fafc;
   --color-texto: #0f172a;
   --radio: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 * { box-sizing: border-box; }
@@ -36,3 +39,12 @@ th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #e2e8f
 .error { color: #b91c1c; }
 .login { max-width: 320px; margin: 4rem auto; }
 .version { padding: 1rem; text-align: center; font-size: .8rem; opacity: .6; }
+
+
+.contenido {
+  flex: 1;                 // ocupa el espacio entre header y footer
+  display: flex;
+  justify-content: center; // centra horizontalmente
+  align-items: center;     // centra verticalmente
+  padding: 1rem;
+}
