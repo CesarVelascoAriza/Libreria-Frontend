@@ -1,0 +1,149 @@
+name: CI/CD Angular con Git Flow
+
+on:
+  pull_request:
+    branches: ["develop", "master", "release/*"]
+  push:
+    branches: ["develop", "master"]
+  pull_request_target:
+    types: [closed]
+    branches: ["master"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    name: Build, pruebas, release y limpieza
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      # Cierre de PR de release hacia master
+      IS_RELEASE_MERGE: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') }}
+      # Push a develop: calcula version y abre release
+      IS_DEVELOP_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+
+    steps:
+      # ---------- Preparación ----------
+      - name: Checkout del repositorio
+        if: github.event_name != 'pull_request_target' || env.IS_RELEASE_MERGE == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merge_commit_sha || '' }}
+
+      - name: Configurar Node.js 22
+        if: github.event_name != 'pull_request_target' || env.IS_RELEASE_MERGE == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        if: github.event_name != 'pull_request_target' || env.IS_RELEASE_MERGE == 'true'
+        run: npm ci
+
+      # ---------- Integración continua ----------
+      - name: Pruebas unitarias
+        if: github.event_name != 'pull_request_target'
+        run: |
+          for p in models data-access tienda admin; do
+            npx ng test "$p" --no-watch
+          done
+
+      - name: Build de producción de tienda y admin
+        if: github.event_name != 'pull_request_target' || env.IS_RELEASE_MERGE == 'true'
+        run: |
+          for p in tienda admin; do
+            npx ng build "$p"
+          done
+
+      # ---------- Versionado (push a develop) ----------
+      - name: Determinar tipo de cambio (major / minor / patch)
+        id: bump
+        if: env.IS_DEVELOP_PUSH == 'true'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [[ "$BEFORE" =~ ^0+$ ]]; then RANGE="HEAD~1..HEAD"; else RANGE="$BEFORE..${{ github.sha }}"; fi
+          LOG=$(git log "$RANGE" --format='%s%n%b' | tr 'A-Z' 'a-z')
+
+          if echo "$LOG" | grep -Eq 'breaking change|^[a-z]+(\([^)]*\))?!:'; then TYPE=major
+          elif echo "$LOG" | grep -Eq '^(feat|mejora|improve|enhancement)|from [^ ]*/(feat|feature|mejora|improve)[/-]'; then TYPE=minor
+          elif echo "$LOG" | grep -Eq '^(fix|bug|hotfix|refactor)|from [^ ]*/(fix|bugfix|hotfix|refactor)[/-]'; then TYPE=patch
+          else TYPE=none; fi
+          echo "Tipo de cambio: $TYPE"
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Calcular nueva versión desde el último tag
+        if: env.IS_DEVELOP_PUSH == 'true' && steps.bump.outputs.type != 'none'
+        run: |
+          LAST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          LAST=${LAST#v}; LAST=${LAST:-0.0.0}
+          IFS=. read -r MA MI PA <<< "$LAST"
+          case "${{ steps.bump.outputs.type }}" in
+            major) MA=$((MA+1)); MI=0; PA=0 ;;
+            minor) MI=$((MI+1)); PA=0 ;;
+            patch) PA=$((PA+1)) ;;
+          esac
+          echo "VERSION=$MA.$MI.$PA" >> "$GITHUB_ENV"
+          echo "Versión anterior $LAST -> $MA.$MI.$PA"
+
+      - name: Actualizar versión en package.json
+        if: env.IS_DEVELOP_PUSH == 'true' && steps.bump.outputs.type != 'none'
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Crear (o reemplazar) la rama release y abrir PR a master
+        if: env.IS_DEVELOP_PUSH == 'true' && steps.bump.outputs.type != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "release/$VERSION"
+          git commit -am "chore(release): version $VERSION"
+          git push --force origin "release/$VERSION"
+          gh pr create --base master --head "release/$VERSION" \
+            --title "Release $VERSION" \
+            --body "Release $VERSION generada desde develop (cambio: ${{ steps.bump.outputs.type }}). Al mergear se crea el tag v$VERSION, el release y se elimina esta rama." \
+            || echo "El PR ya existe o no se pudo crear"
+
+      # ---------- Publicación (merge de release/* a master) ----------
+      - name: Versión desde el nombre de la rama
+        if: env.IS_RELEASE_MERGE == 'true'
+        run: |
+          VERSION="${{ github.event.pull_request.head.ref }}"
+          VERSION="${VERSION#release/}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Rama inválida"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Empaquetar artefactos
+        if: env.IS_RELEASE_MERGE == 'true'
+        run: |
+          for app in tienda admin; do
+            (cd "dist/$app/browser" && zip -qr "$GITHUB_WORKSPACE/$app-$VERSION.zip" .)
+          done
+
+      - name: Crear tag y release
+        if: env.IS_RELEASE_MERGE == 'true'
+        run: |
+          gh release create "v$VERSION" \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            --title "v$VERSION" \
+            --generate-notes \
+            "tienda-$VERSION.zip" "admin-$VERSION.zip"
+
+      - name: Sincronizar master de vuelta a develop
+        if: env.IS_RELEASE_MERGE == 'true'
+        run: |
+          gh pr create --base develop --head master \
+            --title "Sync v$VERSION a develop" \
+            --body "Trae a develop la versión publicada v$VERSION." \
+            || echo "El PR ya existe o no hay cambios"
+
+      - name: Eliminar rama release
+        if: env.IS_RELEASE_MERGE == 'true'
+        run: git push origin --delete "${{ github.event.pull_request.head.ref }}"
