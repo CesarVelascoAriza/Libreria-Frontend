@@ -23,7 +23,8 @@ jobs:
     name: Build, pruebas, release y limpieza
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # RELEASE_PAT es opcional: permite crear PRs sin activar el permiso del repositorio
+      GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
       # Cierre de PR de release hacia master
       IS_RELEASE_MERGE: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') }}
@@ -111,10 +112,14 @@ jobs:
           git checkout -b "release/$VERSION"
           git commit -am "chore(release): version $VERSION"
           git push --force origin "release/$VERSION"
-          gh pr create --base master --head "release/$VERSION" \
-            --title "Release $VERSION" \
-            --body "Release $VERSION generada desde develop (cambio: ${{ steps.bump.outputs.type }}). Al mergear se crea el tag v$VERSION, el release y se elimina esta rama." \
-            || echo "El PR ya existe o no se pudo crear"
+          if [[ -n "$(gh pr list --base master --head "release/$VERSION" --state open --json number --jq '.[].number')" ]]; then
+            echo "El PR de release/$VERSION ya existe"
+          else
+            gh pr create --base master --head "release/$VERSION" \
+              --title "Release $VERSION" \
+              --body "Release $VERSION generada desde develop (cambio: ${{ steps.bump.outputs.type }}). Al mergear se crea el tag v$VERSION, el release y se elimina esta rama." \
+              || { echo "::error::No se pudo crear el PR. Activa Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests'"; exit 1; }
+          fi
 
       # ---------- Publicación (merge de release/* a master o push de tag) ----------
       - name: Versión desde la rama release o el tag
@@ -152,10 +157,17 @@ jobs:
       - name: Sincronizar master de vuelta a develop
         if: env.IS_RELEASE_MERGE == 'true'
         run: |
-          gh pr create --base develop --head master \
-            --title "Sync v$VERSION a develop" \
-            --body "Trae a develop la versión publicada v$VERSION." \
-            || echo "El PR ya existe o no hay cambios"
+          git fetch origin develop master
+          if [[ -z "$(git log origin/develop..origin/master --oneline)" ]]; then
+            echo "develop ya contiene master"
+          elif [[ -n "$(gh pr list --base develop --head master --state open --json number --jq '.[].number')" ]]; then
+            echo "El PR de sincronización ya existe"
+          else
+            gh pr create --base develop --head master \
+              --title "Sync v$VERSION a develop" \
+              --body "Trae a develop la versión publicada v$VERSION." \
+              || { echo "::error::No se pudo crear el PR de sincronización. Activa Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests'"; exit 1; }
+          fi
 
       - name: Eliminar rama release
         if: env.IS_RELEASE_MERGE == 'true'
