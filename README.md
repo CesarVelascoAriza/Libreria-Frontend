@@ -2,6 +2,8 @@
 
 Workspace Angular 22 (standalone, signals y Signal Forms) con las aplicaciones web de la librería digital. Consume los microservicios del repositorio [Libreria](https://github.com/CesarVelascoAriza/Libreria) a través del Gateway.
 
+Versión actual: **1.0.0** (visible en el pie de ambas aplicaciones; se toma de `package.json`).
+
 ## Arquitectura
 
 ```mermaid
