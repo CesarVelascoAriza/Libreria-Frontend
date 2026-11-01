@@ -5,6 +5,7 @@ on:
     branches: ["develop", "master", "release/*"]
   push:
     branches: ["develop", "master"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   pull_request_target:
     types: [closed]
     branches: ["master"]
@@ -28,6 +29,8 @@ jobs:
       IS_RELEASE_MERGE: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') }}
       # Push a develop: calcula version y abre release
       IS_DEVELOP_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+      # Push de un tag vX.Y.Z: publica el release si no existe
+      IS_TAG_PUSH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
 
     steps:
       # ---------- Preparación ----------
@@ -80,11 +83,13 @@ jobs:
           echo "Tipo de cambio: $TYPE"
           echo "type=$TYPE" >> "$GITHUB_OUTPUT"
 
-      - name: Calcular nueva versión desde el último tag
+      - name: Calcular nueva versión (el mayor entre el último tag y package.json)
         if: env.IS_DEVELOP_PUSH == 'true' && steps.bump.outputs.type != 'none'
         run: |
-          LAST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
-          LAST=${LAST#v}; LAST=${LAST:-0.0.0}
+          TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          TAG=${TAG#v}; TAG=${TAG:-0.0.0}
+          PKG=$(node -p "require('./package.json').version")
+          LAST=$(printf '%s\n%s\n' "$TAG" "$PKG" | sort -V | tail -1)
           IFS=. read -r MA MI PA <<< "$LAST"
           case "${{ steps.bump.outputs.type }}" in
             major) MA=$((MA+1)); MI=0; PA=0 ;;
@@ -111,27 +116,35 @@ jobs:
             --body "Release $VERSION generada desde develop (cambio: ${{ steps.bump.outputs.type }}). Al mergear se crea el tag v$VERSION, el release y se elimina esta rama." \
             || echo "El PR ya existe o no se pudo crear"
 
-      # ---------- Publicación (merge de release/* a master) ----------
-      - name: Versión desde el nombre de la rama
-        if: env.IS_RELEASE_MERGE == 'true'
+      # ---------- Publicación (merge de release/* a master o push de tag) ----------
+      - name: Versión desde la rama release o el tag
+        if: env.IS_RELEASE_MERGE == 'true' || env.IS_TAG_PUSH == 'true'
         run: |
-          VERSION="${{ github.event.pull_request.head.ref }}"
-          VERSION="${VERSION#release/}"
+          if [[ "$IS_TAG_PUSH" == "true" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ github.event.pull_request.head.ref }}"
+            VERSION="${VERSION#release/}"
+          fi
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Rama inválida"; exit 1; }
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Empaquetar artefactos
-        if: env.IS_RELEASE_MERGE == 'true'
+        if: env.IS_RELEASE_MERGE == 'true' || env.IS_TAG_PUSH == 'true'
         run: |
           for app in tienda admin; do
             (cd "dist/$app/browser" && zip -qr "$GITHUB_WORKSPACE/$app-$VERSION.zip" .)
           done
 
       - name: Crear tag y release
-        if: env.IS_RELEASE_MERGE == 'true'
+        if: env.IS_RELEASE_MERGE == 'true' || env.IS_TAG_PUSH == 'true'
         run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "El release v$VERSION ya existe"; exit 0
+          fi
+          TARGET="${{ github.event.pull_request.merge_commit_sha || github.sha }}"
           gh release create "v$VERSION" \
-            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            --target "$TARGET" \
             --title "v$VERSION" \
             --generate-notes \
             "tienda-$VERSION.zip" "admin-$VERSION.zip"
