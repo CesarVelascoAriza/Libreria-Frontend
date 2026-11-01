@@ -23,7 +23,8 @@ jobs:
     name: Build, pruebas, release y limpieza
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # RELEASE_PAT es opcional: permite crear PRs sin activar el permiso del repositorio
+      GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
       # Cierre de PR de release hacia master
       IS_RELEASE_MERGE: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') }}
