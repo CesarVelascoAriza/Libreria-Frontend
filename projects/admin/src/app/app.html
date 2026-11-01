@@ -1,0 +1,10 @@
+<header class="barra">
+  <h1>Administración</h1>
+  @if (auth.autenticado()) {
+    <a routerLink="/libros" routerLinkActive="activo">Libros</a>
+    <a routerLink="/usuarios" routerLinkActive="activo">Usuarios</a>
+    <span class="usuario">{{ auth.usuario() }}</span>
+    <button type="button" (click)="salir()">Salir</button>
+  }
+</header>
+<router-outlet />

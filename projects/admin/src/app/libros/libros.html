@@ -1,0 +1,44 @@
+<form class="tarjeta" (submit)="guardar($event)">
+  <h2>{{ titulo() }}</h2>
+  <input placeholder="Título" [formField]="formulario.title" />
+  <input placeholder="Subtítulo" [formField]="formulario.subTitle" />
+  <input type="date" [formField]="formulario.datePublication" />
+  <input type="number" placeholder="Precio" [formField]="formulario.price" />
+  <select [formField]="formulario.categoriaId">
+    <option value="">Sin categoría</option>
+    @for (c of categorias(); track c.id) {
+      <option [value]="c.id">{{ c.description }}</option>
+    }
+  </select>
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  <button type="submit" [disabled]="formulario().invalid()">Guardar</button>
+  @if (editando()) {
+    <button type="button" (click)="cancelar()">Cancelar</button>
+  }
+</form>
+
+@if (cargando()) {
+  <p>Cargando...</p>
+}
+
+<table>
+  <thead>
+    <tr><th>ISBN</th><th>Título</th><th>Categoría</th><th>Precio</th><th></th></tr>
+  </thead>
+  <tbody>
+    @for (libro of libros(); track libro.isbn) {
+      <tr>
+        <td>{{ libro.isbn }}</td>
+        <td>{{ libro.title }}</td>
+        <td>{{ libro.categoria?.description }}</td>
+        <td>{{ libro.price | currency }}</td>
+        <td>
+          <button type="button" (click)="editar(libro)">Editar</button>
+          <button type="button" (click)="eliminar(libro)">Eliminar</button>
+        </td>
+      </tr>
+    }
+  </tbody>
+</table>

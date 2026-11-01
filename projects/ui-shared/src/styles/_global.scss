@@ -1,0 +1,37 @@
+// projects/ui-shared/src/styles/_global.scss
+:root {
+  --color-primario: #1e3a8a;
+  --color-fondo: #f8fafc;
+  --color-texto: #0f172a;
+  --radio: 8px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--color-fondo);
+  color: var(--color-texto);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.tarjeta {
+  background: #fff;
+  border-radius: var(--radio);
+  padding: 1rem;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.1);
+}
+
+form.tarjeta { display: grid; gap: .5rem; max-width: 420px; margin: 1rem; }
+input, select, button { padding: .4rem .6rem; font: inherit; }
+table { border-collapse: collapse; width: calc(100% - 2rem); margin: 1rem; }
+th, td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid #e2e8f0; }
+.error { color: #b91c1c; }
+.login { max-width: 320px; margin: 4rem auto; }

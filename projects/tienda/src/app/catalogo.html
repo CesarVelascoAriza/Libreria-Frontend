@@ -1,0 +1,31 @@
+<section class="filtros">
+  <input placeholder="Buscar..." (input)="buscar($event)" />
+  <select (change)="filtrar($event)">
+    <option value="">Todas</option>
+    @for (c of categorias(); track c) {
+      <option [value]="c">{{ c }}</option>
+    }
+  </select>
+  <span>{{ libros().length }} de {{ total() }} libros</span>
+</section>
+
+@if (cargando()) {
+  <p>Cargando...</p>
+} @else if (error()) {
+  <p class="error">No se pudo cargar el catálogo.</p>
+}
+
+<div class="grid">
+  @for (libro of libros(); track libro.isbn) {
+    <article class="tarjeta">
+      <h3>{{ libro.title }}</h3>
+      <p>{{ libro.subTitle }}</p>
+      <small>{{ libro.categoria?.description }}</small>
+      <strong>{{ libro.price | currency }}</strong>
+    </article>
+  } @empty {
+    @if (!cargando()) {
+      <p>Sin resultados.</p>
+    }
+  }
+</div>

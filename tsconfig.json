@@ -12,12 +12,49 @@
     "experimentalDecorators": true,
     "importHelpers": true,
     "target": "ES2022",
-    "module": "preserve"
+    "module": "preserve",
+    "paths": {
+      "data-access": ["./projects/data-access/src/public-api.ts"],
+      "models": ["./projects/models/src/public-api.ts"],
+      "ui-shared": ["./projects/ui-shared/src/public-api.ts"]
+    }
   },
   "angularCompilerOptions": {
     "enableI18nLegacyMessageIdFormat": false,
     "strictInjectionParameters": true,
     "strictInputAccessModifiers": true
   },
-  "files": []
+  "files": [],
+  "references": [
+    {
+      "path": "./projects/admin/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/admin/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/tienda/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/tienda/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/ui-shared/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/ui-shared/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/data-access/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/data-access/tsconfig.spec.json"
+    },
+    {
+      "path": "./projects/models/tsconfig.lib.json"
+    },
+    {
+      "path": "./projects/models/tsconfig.spec.json"
+    }
+  ]
 }
